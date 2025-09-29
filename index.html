@@ -468,442 +468,96 @@
                 }
             }
             
-            setupMobileAudio() {
+                        setupMobileAudio() {
+                // Create a more visible debug indicator
+                this.createDebugIndicator();
+                
                 const unlockAudio = async () => {
-                    if (this.isAudioUnlocked || !this.audioContext) return;
+                    this.updateDebug('Unlock attempt started');
+                    
+                    if (this.isAudioUnlocked || !this.audioContext) {
+                        this.updateDebug('Already unlocked or no context');
+                        return;
+                    }
                     
                     try {
-                        console.log('Attempting to unlock audio, current state:', this.audioContext.state);
+                        this.updateDebug(`Context state: ${this.audioContext.state}`);
                         
+                        // Force resume first
                         if (this.audioContext.state === 'suspended') {
                             await this.audioContext.resume();
+                            this.updateDebug(`After resume: ${this.audioContext.state}`);
                         }
                         
+                        // Create and play a very short sound
                         const oscillator = this.audioContext.createOscillator();
                         const gainNode = this.audioContext.createGain();
                         
                         oscillator.frequency.value = 440;
                         oscillator.type = 'sine';
-                        gainNode.gain.value = 0;
+                        gainNode.gain.value = 0.01; // Very quiet but not silent
                         
                         oscillator.connect(gainNode);
                         gainNode.connect(this.audioContext.destination);
                         
                         oscillator.start();
-                        oscillator.stop(this.audioContext.currentTime + 0.1);
+                        oscillator.stop(this.audioContext.currentTime + 0.01);
                         
-                        this.isAudioUnlocked = true;
-                        console.log('Audio unlocked successfully!');
-                        
-                        document.removeEventListener('touchstart', unlockAudio);
-                        document.removeEventListener('click', unlockAudio);
+                        // Wait a moment then check
+                        setTimeout(() => {
+                            this.isAudioUnlocked = true;
+                            this.updateDebug('Audio unlocked successfully!');
+                            this.hideDebugIndicator();
+                        }, 100);
                         
                     } catch (error) {
-                        console.log('Audio unlock failed:', error);
+                        this.updateDebug(`Audio unlock failed: ${error.message}`);
                     }
                 };
                 
+                // Add unlock to multiple events
                 document.addEventListener('touchstart', unlockAudio, { once: true });
+                document.addEventListener('touchend', unlockAudio, { once: true });
                 document.addEventListener('click', unlockAudio, { once: true });
                 document.addEventListener('keydown', unlockAudio, { once: true });
+                
+                // Also try on window focus (for when returning to tab)
+                window.addEventListener('focus', unlockAudio, { once: true });
             }
             
-            getFrequency(note) {
-                const frequencies = {
-                    'C4': 261.63, 'C#4': 277.18, 'D4': 293.66, 'D#4': 311.13, 'E4': 329.63,
-                    'F4': 349.23, 'F#4': 369.99, 'G4': 392.00, 'G#4': 415.30, 'A4': 440.00,
-                    'A#4': 466.16, 'B4': 493.88,
-                    'C5': 523.25, 'C#5': 554.37, 'D5': 587.33, 'D#5': 622.25, 'E5': 659.25,
-                    'F5': 698.46, 'F#5': 739.99, 'G5': 783.99, 'G#5': 830.61, 'A5': 880.00,
-                    'A#5': 932.33, 'B5': 987.77
-                };
-                return frequencies[note] || 440;
+            createDebugIndicator() {
+                const debug = document.createElement('div');
+                debug.id = 'audioDebug';
+                debug.style.cssText = `
+                    position: fixed;
+                    top: 10px;
+                    right: 10px;
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 10px;
+                    border-radius: 5px;
+                    font-size: 12px;
+                    z-index: 9999;
+                    max-width: 200px;
+                `;
+                debug.textContent = 'Audio Debug: Tap anywhere to unlock';
+                document.body.appendChild(debug);
             }
             
-            playNote(note) {
-                if (!this.audioContext) {
-                    console.log('No audio context');
-                    return;
-                }
-                
-                console.log('Playing note:', note, 'Audio unlocked:', this.isAudioUnlocked, 'Context state:', this.audioContext.state);
-                
-                if (this.audioContext.state === 'suspended') {
-                    console.log('Audio context suspended, attempting resume');
-                    this.audioContext.resume().then(() => {
-                        this.playNote(note);
-                    });
-                    return;
-                }
-                
-                try {
-                    const frequency = this.getFrequency(note);
-                    const oscillator = this.audioContext.createOscillator();
-                    const gainNode = this.audioContext.createGain();
-                    
-                    oscillator.type = 'square';
-                    oscillator.frequency.value = frequency;
-                    
-                    gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
-                    gainNode.gain.linearRampToValueAtTime(0.3, this.audioContext.currentTime + 0.01);
-                    gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.5);
-                    
-                    oscillator.connect(gainNode);
-                    gainNode.connect(this.gainNode);
-                    
-                    oscillator.start(this.audioContext.currentTime);
-                    oscillator.stop(this.audioContext.currentTime + 0.5);
-                    
-                    console.log('Note played successfully');
-                } catch (error) {
-                    console.log('Error playing note:', error);
+            updateDebug(message) {
+                const debug = document.getElementById('audioDebug');
+                if (debug) {
+                    debug.textContent = `Audio: ${message}`;
+                    console.log('Audio Debug:', message);
                 }
             }
             
-            bindEvents() {
-                const keys = document.querySelectorAll('.white-key, .black-key');
-                const demoBtn = document.getElementById('demoBtn');
-                const volumeSlider = document.getElementById('volumeSlider');
-                
-                keys.forEach(key => {
-                    key.addEventListener('touchstart', (e) => {
-                        e.preventDefault();
-                        const note = key.dataset.note;
-                        this.playNote(note);
-                        key.classList.add('active');
-                    });
-                    
-                    key.addEventListener('touchend', (e) => {
-                        e.preventDefault();
-                        key.classList.remove('active');
-                    });
-                    
-                    key.addEventListener('mousedown', (e) => {
-                        e.preventDefault();
-                        const note = key.dataset.note;
-                        this.playNote(note);
-                        key.classList.add('active');
-                    });
-                    
-                    key.addEventListener('mouseup', (e) => {
-                        e.preventDefault();
-                        key.classList.remove('active');
-                    });
-                    
-                    key.addEventListener('mouseleave', (e) => {
-                        e.preventDefault();
-                        key.classList.remove('active');
-                    });
-                });
-                
-                demoBtn.addEventListener('click', () => {
-                    if (this.demoState === "stopped") {
-                        this.startDemo();
-                    } else if (this.demoState === "playing") {
-                        this.stopDemo();
-                    } else if (this.demoState === "paused") {
-                        this.resumeDemo();
-                    }
-                });
-                
-                volumeSlider.addEventListener('input', (e) => {
-                    this.volume = e.target.value / 100;
-                    if (this.gainNode) {
-                        this.gainNode.gain.value = this.volume;
-                    }
-                });
-            }
-            
-            setupKeyboard() {
-                const keyMap = {
-                    'a': 'C4', 's': 'D4', 'd': 'E4', 'f': 'F4', 'g': 'G4',
-                    'h': 'A4', 'j': 'B4', 'k': 'C5', 'l': 'D5',
-                    'w': 'C#4', 'e': 'D#4', 't': 'F#4', 'y': 'G#4', 'u': 'A#4',
-                    'o': 'C#5', 'p': 'D#5'
-                };
-                
-                document.addEventListener('keydown', (e) => {
-                    const note = keyMap[e.key.toLowerCase()];
-                    if (note) {
-                        e.preventDefault();
-                        this.playNote(note);
-                        const keyElement = document.querySelector(`[data-note="${note}"]`);
-                        if (keyElement) keyElement.classList.add('active');
-                    }
-                });
-                
-                document.addEventListener('keyup', (e) => {
-                    const note = keyMap[e.key.toLowerCase()];
-                    if (note) {
-                        e.preventDefault();
-                        const keyElement = document.querySelector(`[data-note="${note}"]`);
-                        if (keyElement) keyElement.classList.remove('active');
-                    }
-                });
-            }
-            
-            startDemo() {
-                if (this.demoState === "playing") return;
-                
-                this.demoState = "playing";
-                this.demoPosition = 0;
-                this.updateDemoButton();
-                
-                                                const EIGHTH = 150;  // 1.0 unit at 200 BPM
-                const QUARTER = 300; // 2.0 unit at 200 BPM
-                const HALF = 600;    // 4.0 unit at 200 BPM
-                const REST = "REST";
-                
-                const melody = [
-                    // |1| F4(4.0)
-                    { note: "F4", duration: HALF },
-                    
-                    // |2| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |3| C5(2.0) C5(2.0)
-                    { note: "C5", duration: QUARTER },
-                    { note: "C5", duration: QUARTER },
-                    
-                    // |4| C5(1.0) D5(1.0) A4(1.0) B♭4(1.0)
-                    { note: "C5", duration: EIGHTH },
-                    { note: "D5", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    
-                    // |5| G4(2.0) G4(2.0)
-                    { note: "G4", duration: QUARTER },
-                    { note: "G4", duration: QUARTER },
-                    
-                    // |6| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |7| F4(1.0) F5(1.0) E5(1.0) D5(1.0)
-                    { note: "F4", duration: EIGHTH },
-                    { note: "F5", duration: EIGHTH },
-                    { note: "E5", duration: EIGHTH },
-                    { note: "D5", duration: EIGHTH },
-                    
-                    // |8| C5(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "C5", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |9| F4(4.0)
-                    { note: "F4", duration: HALF },
-                    
-                    // |10| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |11| C5(2.0) C5(2.0)
-                    { note: "C5", duration: QUARTER },
-                    { note: "C5", duration: QUARTER },
-                    
-                    // |12| C5(1.0) D5(1.0) A4(1.0) B♭4(1.0)
-                    { note: "C5", duration: EIGHTH },
-                    { note: "D5", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    
-                    // |13| G4(2.0) G4(2.0)
-                    { note: "G4", duration: QUARTER },
-                    { note: "G4", duration: QUARTER },
-                    
-                    // |14| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |15| F4(1.0) C5(1.0) G4(1.0) A4(1.0)
-                    { note: "F4", duration: EIGHTH },
-                    { note: "C5", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    
-                    // |16| F4(2.0) C4(2.0)
-                    { note: "F4", duration: QUARTER },
-                    { note: "C4", duration: QUARTER }
-                ];
-                
-                this.playMelodyFromPosition(melody);
-            }
-            
-            stopDemo() {
-                this.demoState = "paused";
-                this.clearDemoTimeouts();
-                this.updateDemoButton();
-            }
-            
-            resumeDemo() {
-                if (this.demoState !== "paused") return;
-                
-                this.demoState = "playing";
-                this.updateDemoButton();
-                
-                                                const EIGHTH = 150;  // 1.0 unit at 200 BPM
-                const QUARTER = 300; // 2.0 unit at 200 BPM
-                const HALF = 600;    // 4.0 unit at 200 BPM
-                const REST = "REST";
-                
-                const melody = [
-                    // |1| F4(4.0)
-                    { note: "F4", duration: HALF },
-                    
-                    // |2| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |3| C5(2.0) C5(2.0)
-                    { note: "C5", duration: QUARTER },
-                    { note: "C5", duration: QUARTER },
-                    
-                    // |4| C5(1.0) D5(1.0) A4(1.0) B♭4(1.0)
-                    { note: "C5", duration: EIGHTH },
-                    { note: "D5", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    
-                    // |5| G4(2.0) G4(2.0)
-                    { note: "G4", duration: QUARTER },
-                    { note: "G4", duration: QUARTER },
-                    
-                    // |6| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |7| F4(1.0) F5(1.0) E5(1.0) D5(1.0)
-                    { note: "F4", duration: EIGHTH },
-                    { note: "F5", duration: EIGHTH },
-                    { note: "E5", duration: EIGHTH },
-                    { note: "D5", duration: EIGHTH },
-                    
-                    // |8| C5(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "C5", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |9| F4(4.0)
-                    { note: "F4", duration: HALF },
-                    
-                    // |10| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |11| C5(2.0) C5(2.0)
-                    { note: "C5", duration: QUARTER },
-                    { note: "C5", duration: QUARTER },
-                    
-                    // |12| C5(1.0) D5(1.0) A4(1.0) B♭4(1.0)
-                    { note: "C5", duration: EIGHTH },
-                    { note: "D5", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    
-                    // |13| G4(2.0) G4(2.0)
-                    { note: "G4", duration: QUARTER },
-                    { note: "G4", duration: QUARTER },
-                    
-                    // |14| G4(1.0) B♭4(1.0) A4(1.0) G4(1.0)
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A#4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    
-                    // |15| F4(1.0) C5(1.0) G4(1.0) A4(1.0)
-                    { note: "F4", duration: EIGHTH },
-                    { note: "C5", duration: EIGHTH },
-                    { note: "G4", duration: EIGHTH },
-                    { note: "A4", duration: EIGHTH },
-                    
-                    // |16| F4(2.0) C4(2.0)
-                    { note: "F4", duration: QUARTER },
-                    { note: "C4", duration: QUARTER }
-                ];
-                
-                this.playMelodyFromPosition(melody);
-            }
-            
-            playMelodyFromPosition(melody) {
-                if (this.demoState !== "playing") return;
-                
-                this.clearDemoTimeouts();
-                
-                // Using duration directly from melody
-                let currentTime = 0;
-                
-                for (let i = this.demoPosition; i < melody.length; i++) {
-                    const note = melody[i];
-                    const noteDurationMs = note.duration;
-                    
-                    const timeout = setTimeout(() => {
-                        if (this.demoState !== "playing") return;
-                        
-                        this.demoPosition = i + 1;
-                        this.playNote(note.note);
-                        
-                        const keyElement = document.querySelector(`[data-note="${note.note}"]`);
-                        if (keyElement) {
-                            keyElement.classList.add('active');
-                            setTimeout(() => {
-                                keyElement.classList.remove('active');
-                            }, noteDurationMs * 0.8);
-                        }
-                        
-                        if (i === melody.length - 1) {
-                            setTimeout(() => {
-                                this.demoState = "stopped";
-                                this.demoPosition = 0;
-                                this.updateDemoButton();
-                            }, noteDurationMs);
-                        }
-                    }, currentTime);
-                    
-                    this.demoTimeouts.push(timeout);
-                    currentTime += noteDurationMs;
-                }
-            }
-            
-            clearDemoTimeouts() {
-                this.demoTimeouts.forEach(timeout => clearTimeout(timeout));
-                this.demoTimeouts = [];
-            }
-            
-            updateDemoButton() {
-                const demoBtn = document.getElementById('demoBtn');
-                if (demoBtn) {
-                    if (this.demoState === "stopped") {
-                        demoBtn.textContent = "✨ Play Demo";
-                    } else if (this.demoState === "playing") {
-                        demoBtn.textContent = "⏹️ Stop Demo";
-                    } else if (this.demoState === "paused") {
-                        demoBtn.textContent = "🌙 Resume Demo";
-                    }
-                }
-            }
-        }
-        
-        // Initialize piano when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            new SailorMoonPiano();
-        });
+            hideDebugIndicator() {
+                setTimeout(() => {
+                    const debug = document.getElementById('audioDebug');
+                    if (debug) debug.remove();
+                }, 3000);
+            });
     </script>
 </body>
 </html>
