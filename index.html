@@ -471,22 +471,14 @@
             }
             
             setupMobileAudio() {
-                this.createDebugIndicator();
-                
                 const unlockAudio = async () => {
-                    this.updateDebug('Unlock attempt started');
-                    
                     if (this.isAudioUnlocked || !this.audioContext) {
-                        this.updateDebug('Already unlocked or no context');
                         return;
                     }
                     
                     try {
-                        this.updateDebug(`Context state: ${this.audioContext.state}`);
-                        
                         if (this.audioContext.state === 'suspended') {
                             await this.audioContext.resume();
-                            this.updateDebug(`After resume: ${this.audioContext.state}`);
                         }
                         
                         const oscillator = this.audioContext.createOscillator();
@@ -504,12 +496,10 @@
                         
                         setTimeout(() => {
                             this.isAudioUnlocked = true;
-                            this.updateDebug('Audio unlocked successfully!');
-                            this.hideDebugIndicator();
                         }, 100);
                         
                     } catch (error) {
-                        this.updateDebug(`Audio unlock failed: ${error.message}`);
+                        console.log('Audio unlock failed:', error);
                     }
                 };
                 
@@ -518,40 +508,6 @@
                 document.addEventListener('click', unlockAudio, { once: true });
                 document.addEventListener('keydown', unlockAudio, { once: true });
                 window.addEventListener('focus', unlockAudio, { once: true });
-            }
-            
-            createDebugIndicator() {
-                const debug = document.createElement('div');
-                debug.id = 'audioDebug';
-                debug.style.cssText = `
-                    position: fixed;
-                    top: 10px;
-                    right: 10px;
-                    background: rgba(0,0,0,0.8);
-                    color: white;
-                    padding: 10px;
-                    border-radius: 5px;
-                    font-size: 12px;
-                    z-index: 9999;
-                    max-width: 200px;
-                `;
-                debug.textContent = 'Audio Debug: Tap anywhere to unlock';
-                document.body.appendChild(debug);
-            }
-            
-            updateDebug(message) {
-                const debug = document.getElementById('audioDebug');
-                if (debug) {
-                    debug.textContent = `Audio: ${message}`;
-                    console.log('Audio Debug:', message);
-                }
-            }
-            
-            hideDebugIndicator() {
-                setTimeout(() => {
-                    const debug = document.getElementById('audioDebug');
-                    if (debug) debug.remove();
-                }, 3000);
             }
             
             getFrequency(note) {
@@ -568,18 +524,12 @@
             
             playNote(note) {
                 if (!this.audioContext) {
-                    this.updateDebug('No audio context');
                     return;
                 }
                 
-                this.updateDebug(`Playing: ${note}, Unlocked: ${this.isAudioUnlocked}, State: ${this.audioContext.state}`);
-                
                 if (this.audioContext.state === 'suspended') {
-                    this.updateDebug('Resuming suspended context');
                     this.audioContext.resume().then(() => {
                         this.playNote(note);
-                    }).catch(err => {
-                        this.updateDebug(`Resume failed: ${err.message}`);
                     });
                     return;
                 }
@@ -600,10 +550,8 @@
                     
                     oscillator.start(this.audioContext.currentTime);
                     oscillator.stop(this.audioContext.currentTime + 0.3);
-                    
-                    this.updateDebug('Note played successfully');
                 } catch (error) {
-                    this.updateDebug(`Play error: ${error.message}`);
+                    console.log('Play error:', error);
                 }
             }
             
